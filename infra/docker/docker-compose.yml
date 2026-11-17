@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Long-Term Memory (Viewed via MongoDB Compass)
+  mongo:
+    image: mongo:7.0
+    container_name: placementpilot_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ../../database/mongo/data:/data/db
+      - ../../database/mongo/init-scripts:/docker-entrypoint-initdb.d
+    restart: always
+
+  # 2. Vector DB Microservice (ChromaDB)
+  chroma:
+    image: chromadb/chroma:0.5.5
+    container_name: placementpilot_chroma
+    ports:
+      - "8002:8000"
+    volumes:
+      - ../../database/chroma/data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+
+  # 3. Core LangGraph Multi-Agent Orchestrator Gateway
+  orchestrator:
+    build:
+      context: ../../backend/services/orchestrator
+    container_name: placementpilot_orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/placement_pilot
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    depends_on:
+      - mongo
+      - chroma
+
+  # 4. Interactive Gamified Frontend (Next.js 14)
+  frontend:
+    build:
+      context: ../../frontend
+    container_name: placementpilot_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - orchestrator
